@@ -41,7 +41,7 @@ module.exports.FormatData = (data) => {
   if (data) {
     return { data };
   }
-  throw new Error("Data Not found!");
+  return { data: null };
 };
 
 //Message Broker

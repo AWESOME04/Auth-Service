@@ -17,13 +17,20 @@ userRoutes = (app, channel) => {
     }
   });
 
-  app.post("/login", async (req, res, next) => {
+  app.post("/login", async (req, res) => {
     try {
       const { email, password } = req.body;
-      const { data } = await service.SignIn({ email, password });
-      return res.json(data);
-    } catch (err) {
-      next(err);
+      const userService = new UserService();
+      const userData = await userService.SignIn({ email, password });
+      
+      if (!userData) {
+        return res.status(401).json({ message: "Invalid credentials" });
+      }
+
+      return res.json(userData);
+    } catch (error) {
+      console.error("Login error:", error);
+      return res.status(401).json({ message: error.message || "Invalid credentials" });
     }
   });
 
@@ -66,13 +73,20 @@ userRoutes = (app, channel) => {
     }
   });
 
-  app.get("/profile", auth, async (req, res, next) => {
+  app.get("/profile", auth, async (req, res) => {
     try {
       const { _id } = req.user;
-      const { data } = await service.GetProfile(_id);
-      return res.json(data);
-    } catch (err) {
-      next(err);
+      const userService = new UserService();
+      const userData = await userService.GetProfile(_id);
+      
+      if (!userData) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      return res.json(userData);
+    } catch (error) {
+      console.error("Profile error:", error);
+      return res.status(500).json({ message: error.message || "Error fetching profile" });
     }
   });
 

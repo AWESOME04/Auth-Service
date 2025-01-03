@@ -39,6 +39,21 @@ const Profile = sequelize.define('profile', {
     },
     onDelete: 'CASCADE',
     onUpdate: 'CASCADE'
+  },
+  cart: {
+    type: DataTypes.JSON,
+    defaultValue: [],
+    allowNull: false
+  },
+  wishlist: {
+    type: DataTypes.JSON,
+    defaultValue: [],
+    allowNull: false
+  },
+  orders: {
+    type: DataTypes.JSON,
+    defaultValue: [],
+    allowNull: false
   }
 }, {
   timestamps: true,

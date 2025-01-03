@@ -13,27 +13,39 @@ class UserService {
 
   async SignIn(userInputs) {
     const { email, password } = userInputs;
+    
+    try {
+      const user = await this.repository.FindUser({ email });
 
-    const user = await this.repository.FindUser({ email });
-
-    if (user) {
-      const validPassword = await ValidatePassword(password, user.password);
-      if (validPassword) {
-        const token = await GenerateSignature({
-          email: user.email,
-          _id: user.id,
-          role: user.role,
-        });
-        return FormatData({ id: user.id, token, role: user.role });
+      if (!user) {
+        throw new Error('User not found');
       }
-    }
 
-    return FormatData(null);
+      const validPassword = await ValidatePassword(password, user.password);
+      
+      if (!validPassword) {
+        throw new Error('Invalid password');
+      }
+
+      const token = await GenerateSignature({
+        email: user.email,
+        _id: user.id,
+        role: user.role,
+      });
+
+      return { 
+        id: user.id, 
+        email: user.email,
+        role: user.role,
+        token 
+      };
+    } catch (error) {
+      throw error;
+    }
   }
 
   async SignUp(userInputs) {
     const { email, password, phone, role } = userInputs;
-
     let userPassword = await GeneratePassword(password);
 
     const user = await this.repository.CreateUser({
@@ -52,8 +64,7 @@ class UserService {
   }
 
   async AddProfile(_id, profileData) {
-    const { name,gender,street, postalCode, city, country } = profileData;
-
+    const { name, gender, street, postalCode, city, country } = profileData;
     const profile = await this.repository.CreateProfile({
       _id,
       name,
@@ -63,20 +74,38 @@ class UserService {
       city,
       country,
     });
-
     return FormatData(profile);
   }
 
-
   async GetProfile(id) {
-    const user = await this.repository.FindUserById({ id });
-    console.log(user)
-    return FormatData(user.profile);
+    try {
+      const user = await this.repository.FindUserById(id);
+      
+      if (!user) {
+        throw new Error("User not found");
+      }
+
+      // Generate a new token to ensure session persistence
+      const token = await GenerateSignature({
+        email: user.email,
+        _id: user.id,
+        role: user.role,
+      });
+
+      return {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        phone: user.phone,
+        token
+      };
+    } catch (error) {
+      throw error;
+    }
   }
 
-    async EditProfile(_id, profileData) {
-    const { name,gender,street, postalCode, city, country } = profileData;
-
+  async EditProfile(_id, profileData) {
+    const { name, gender, street, postalCode, city, country } = profileData;
     const updatedProfile = await this.repository.EditProfile({
       _id,
       name,
@@ -86,82 +115,86 @@ class UserService {
       city,
       country,
     });
-
     return FormatData(updatedProfile);
   }
 
   async GetUser(id) {
-    const user = await FindById(id).populate('profile');
+    const user = await this.repository.FindUserById({ id });
     return FormatData(user);
   }
 
   async GetCart(id) {
     const user = await this.repository.FindUserById({ id });
-    return FormatData(user.cart);
+    return FormatData(user.profile.cart || []);
   }
-
 
   async GetWishList(id) {
     const user = await this.repository.FindUserById({ id });
-    return FormatData(user.wishlist);
+    return FormatData(user.profile.wishlist || []);
   }
 
   async AddToWishlist(userId, product) {
-    const wishlistItem = await this.repository.AddWishlistItem(
-      userId,
-      product
-    );
-    return FormatData(wishlistItem);
+    try {
+      const wishlistItem = await this.repository.AddWishlistItem(userId, product);
+      return FormatData(wishlistItem);
+    } catch (err) {
+      console.error('Error adding to wishlist:', err);
+      throw err;
+    }
   }
 
-  async ManageCart(userId, product, qty, isRemove) {
-    const cartResult = await this.repository.AddCartItem(
-      userId,
-      product,
-      qty,
-      isRemove
-    );
-    return FormatData(cartResult);
+  async ManageCart(userId, product, amount, isRemove) {
+    try {
+      const cartResult = await this.repository.AddCartItem(
+        userId,
+        product,
+        amount || 1,
+        isRemove
+      );
+      return FormatData(cartResult);
+    } catch (err) {
+      console.error('Error managing cart:', err);
+      throw err;
+    }
   }
 
   async ManageOrder(userId, order) {
-    const orderResult = await this.repository.AddOrderToProfile(
-      userId,
-      order
-    );
-    return FormatData(orderResult);
+    try {
+      const orderResult = await this.repository.AddOrderToProfile(userId, order);
+      return FormatData(orderResult);
+    } catch (err) {
+      console.error('Error managing order:', err);
+      throw err;
+    }
   }
 
   async SubscribeEvents(payload) {
+    try {
+      const data = JSON.parse(payload);
+      const { event, data: eventData } = data;
+      
+      const { userId, product, order } = eventData;
+      const amount = eventData.amount || eventData.qty || 1;
 
-    payload = JSON.parse(payload);
-    console.log(payload);
-
-    const { event, data } = payload;
-    console.log("EVENT AND DATA", event, data);
-
-    const { userId, product, order, qty } = data;
-    console.log(userId, product,'PRODUCT orderrr?????????', order, qty)
-
-    switch (event) {
-      case "ADD_TO_WISHLIST":
-      case "REMOVE_FROM_WISHLIST":
-        this.AddToWishlist(userId, product);
-        break;
-      case "ADD_TO_CART":
-        this.ManageCart(userId, product, qty, false);
-        break;
-      case "REMOVE_FROM_CART":
-        this.ManageCart(userId, product, qty, true);
-        break;
-      case "CREATE_ORDER":
-        this.ManageOrder(userId, order);
-        break;
-      case "TEST":
-        console.log("User service up and running man");
-        break;
-      default:
-        break;
+      switch (event) {
+        case "ADD_TO_WISHLIST":
+        case "REMOVE_FROM_WISHLIST":
+          await this.AddToWishlist(userId, product);
+          break;
+        case "ADD_TO_CART":
+          await this.ManageCart(userId, product, amount, false);
+          break;
+        case "REMOVE_FROM_CART":
+          await this.ManageCart(userId, product, amount, true);
+          break;
+        case "CREATE_ORDER":
+          await this.ManageOrder(userId, order);
+          break;
+        default:
+          break;
+      }
+    } catch (err) {
+      console.error('Error in SubscribeEvents:', err);
     }
   }
 }

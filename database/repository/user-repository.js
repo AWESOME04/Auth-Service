@@ -21,7 +21,10 @@ class UserRepository {
 
       const profile = await Profile.create({
         ...profileData,
-        user_id: _id
+        user_id: _id,
+        cart: [],
+        wishlist: [],
+        orders: []
       });
 
       return await User.findByPk(_id, {
@@ -57,58 +60,127 @@ class UserRepository {
   }
 
   async FindUser({ email }) {
-    return await User.findOne({
-      where: { email },
-      include: [{ model: Profile, as: 'profile' }]
-    });
-  }
-
-  async FindUserById({ id }) {
-    return await User.findByPk(id, {
-      include: [{ model: Profile, as: 'profile' }]
-    });
-  }
-
-  async AddToWishlist(_id, product) {
-    const user = await User.findByPk(_id);
-    if (user) {
-      const wishlist = user.wishlist || [];
-      wishlist.push(product);
-      await user.update({ wishlist });
-      return await User.findByPk(_id);
+    try {
+      return await User.findOne({
+        where: { email },
+        include: [{ model: Profile, as: 'profile' }]
+      });
+    } catch (error) {
+      console.error('Error finding user:', error);
+      throw error;
     }
   }
 
-  async AddToCart(_id, product) {
-    const user = await User.findByPk(_id);
-    if (user) {
-      const cart = user.cart || [];
-      cart.push(product);
-      await user.update({ cart });
-      return await User.findByPk(_id);
-    }
-  }
-
-  async RemoveFromCart(_id, product_id) {
-    const user = await User.findByPk(_id);
-    if (user) {
-      const cart = user.cart || [];
-      const index = cart.findIndex(item => item.product._id === product_id);
-      if (index > -1) {
-        cart.splice(index, 1);
-        await user.update({ cart });
+  async FindUserById(id) {
+    try {
+      // Handle both id and _id
+      const userId = typeof id === 'object' ? id._id || id.id : id;
+      
+      const user = await User.findByPk(userId);
+      if (!user) {
+        throw new Error('User not found');
       }
-      return await User.findByPk(_id);
+      return user;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async AddWishlistItem(userId, product) {
+    try {
+      const user = await User.findByPk(userId, {
+        include: [{ model: Profile, as: 'profile' }]
+      });
+
+      if (!user || !user.profile) {
+        throw new Error('User or profile not found');
+      }
+
+      const profile = user.profile;
+      const wishlist = profile.wishlist || [];
+      
+      // Check if product already exists in wishlist
+      const exists = wishlist.some(item => item.id === product.id);
+      if (!exists) {
+        wishlist.push(product);
+        await Profile.update(
+          { wishlist },
+          { where: { id: profile.id } }
+        );
+      }
+
+      return wishlist;
+    } catch (error) {
+      console.error('Error adding to wishlist:', error);
+      throw error;
+    }
+  }
+
+  async AddCartItem(userId, product, qty, isRemove = false) {
+    try {
+      const user = await User.findByPk(userId, {
+        include: [{ model: Profile, as: 'profile' }]
+      });
+
+      if (!user || !user.profile) {
+        throw new Error('User or profile not found');
+      }
+
+      const profile = user.profile;
+      let cart = profile.cart || [];
+
+      if (isRemove) {
+        cart = cart.filter(item => item.id !== product.id);
+      } else {
+        const existingItem = cart.find(item => item.id === product.id);
+        if (existingItem) {
+          existingItem.quantity = qty;
+        } else {
+          cart.push({ ...product, quantity: qty });
+        }
+      }
+
+      await Profile.update(
+        { cart },
+        { where: { id: profile.id } }
+      );
+
+      return cart;
+    } catch (error) {
+      console.error('Error managing cart:', error);
+      throw error;
     }
   }
 
   async AddOrderToProfile(userId, order) {
-    const user = await User.findByPk(userId);
-    if (user) {
-      const orders = user.orders || [];
+    try {
+      const user = await User.findByPk(userId, {
+        include: [{ model: Profile, as: 'profile' }]
+      });
+
+      if (!user || !user.profile) {
+        throw new Error('User or profile not found');
+      }
+
+      const profile = user.profile;
+      const orders = profile.orders || [];
       orders.push(order);
-      await user.update({ orders });
-      return await User.findByPk(userId);
+
+      await Profile.update(
+        { orders },
+        { where: { id: profile.id } }
+      );
+
+      // Clear cart after successful order
+      await Profile.update(
+        { cart: [] },
+        { where: { id: profile.id } }
+      );
+
+      return orders;
+    } catch (error) {
+      console.error('Error adding order:', error);
+      throw error;
     }
   }
 }

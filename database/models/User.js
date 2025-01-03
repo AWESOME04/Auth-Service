@@ -24,7 +24,7 @@ const User = sequelize.define('user', {
     allowNull: false
   },
   role: {
-    type: DataTypes.ENUM('Buyer', 'Seller'),
+    type: DataTypes.ENUM('BUYER', 'SELLER'),
     allowNull: false
   },
   cart: {
