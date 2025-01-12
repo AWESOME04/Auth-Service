@@ -10,9 +10,14 @@ userRoutes = (app, channel) => {
   app.post("/signup", async (req, res, next) => {
     try {
       const { email, password, phone, role } = req.body;
-      const { data } = await service.SignUp({ email, password, phone, role });      
-      return res.status(201).json(data);
+      const result = await service.SignUp({ email, password, phone, role });      
+      return res.status(201).json(result);
     } catch (err) {
+      if (err.name === 'SequelizeUniqueConstraintError') {
+        return res.status(400).json({ 
+          message: 'Email address is already registered. Please use a different email or login to your account.' 
+        });
+      }
       next(err);
     }
   });

@@ -45,22 +45,39 @@ class UserService {
   }
 
   async SignUp(userInputs) {
-    const { email, password, phone, role } = userInputs;
-    let userPassword = await GeneratePassword(password);
+    try {
+      const { email, password, phone, role } = userInputs;
+      
+      // Validate role
+      if (!['BUYER', 'SELLER'].includes(role)) {
+        throw new Error('Invalid role. Must be either BUYER or SELLER');
+      }
 
-    const user = await this.repository.CreateUser({
-      email,
-      password: userPassword,
-      phone,
-      role,
-    });
+      let userPassword = await GeneratePassword(password);
 
-    const token = await GenerateSignature({
-      email: email,
-      _id: user.id,
-      role: role,
-    });
-    return FormatData({ id: user.id, token, role });
+      const user = await this.repository.CreateUser({
+        email,
+        password: userPassword,
+        phone,
+        role,
+      });
+
+      const token = await GenerateSignature({
+        email: email,
+        _id: user.id,
+        role: role,
+      });
+
+      return FormatData({
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        token
+      });
+    } catch (error) {
+      console.error('SignUp error:', error);
+      throw error;
+    }
   }
 
   async AddProfile(_id, profileData) {
